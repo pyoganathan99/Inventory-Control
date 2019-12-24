@@ -1,0 +1,226 @@
+<html>
+
+<head>
+    <title>Invoice</title>
+    <script src="node_modules/handsontable/dist/handsontable.full.min.js"></script>
+    <link href="node_modules/handsontable/dist/handsontable.full.min.css" rel="stylesheet" media="screen">
+</head>
+
+<style>
+    body {
+        font-family: sans-serif;
+    }
+    #print table {
+        border-collapse: collapse;
+        padding:24px;
+        width: 100%;
+
+    }
+
+    #print table, th, td {
+        border-top: 1px solid black;
+        border-bottom: 1px solid black;
+        border-left:none;
+        padding: 12px;
+    }
+
+    #print table > tbody > tr > td, #print table > thead > tr > th{
+        text-align: right;
+    }
+
+    #print table > tbody > tr > td:nth-child(1), #print table > thead > tr > th:nth-child(1) {
+        text-align: left;
+    }
+
+    #print {
+        visibility: hidden;
+    }
+
+    @media print {
+
+        body *, #tohide {
+            visibility: hidden;
+        }
+
+        #print, #print * {
+            visibility: visible;
+        }
+
+        #print {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+        }        
+
+    }
+</style>
+
+<body>
+
+    <button onclick="startPrint()">Print</button>
+    <button onclick="addRow();">Add</button>
+    <button onclick="subtract();">Reduce from stock</button>
+    <button onclick="location = 'index.html'">Close</button>
+    <br><br>
+    <div id="example"></div>
+    <br>
+    <div id="tohide">
+        Total: <span id="total"></span><br>
+        GST @: <input type='number' id='gstrate' style="width: 36px;" value="0" onchange="calculate(0)"> : <span id='gstval'></span><br>
+        Grand: <b><span id='grand'></span></b>
+    </div><br>
+    <div id="print" style="border:solid 1px;text-align: center; border-collapse: collapse;">
+
+        <div id="storeheader">
+
+            
+
+        </div>
+        <span id="date"></span><br><br>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Product Details</th>
+                    <th>Rate</th>
+                    <th>Qty</th>
+                    <th>Price</th>
+                </tr>
+            </thead>
+            <tbody id="tbody">
+                <tr>
+                    <td>a</td>
+                    <td>a</td>
+                    <td>a</td>
+                    <td>a</td>
+                </tr>
+            </tbody>
+
+        </table>
+
+        <div style="text-align:right; margin:24px;">
+            Total : <span id="ptotal"></span><br>
+            GST @ <span id="pgstrate"></span>%
+            : <span id="pgst"></span><br>
+            <h3>Grand: <span id="pgrand"></span></h3>
+        </div>
+
+    </div>
+
+</body>
+
+<script>
+
+    var fs = require('fs');
+    var file = fs.readFileSync('products.csv');
+    var raw = file.toString();
+
+    var data = [['', '', '', '']];
+
+    var productDetails = raw.split('\n').map(e => e.split(','));
+    var products = productDetails.map(e => e[0]);
+
+    var container = document.getElementById('example');
+    var hot = new Handsontable(container, {
+        data: data,
+        rowHeaders: true,
+        colHeaders: ['Product', 'Rate', 'Quantity', 'Price'],
+        columns: [
+            {
+                type: 'autocomplete',
+                source: products,
+                strict: false,
+            },
+            { editor: 'numeric' },
+            { editor: 'numeric' }, {
+                editor: false,
+            }
+        ], afterChange: (changes) => {
+            if (changes) {
+                changes.forEach(([row, col, oldValue, newValue]) => {
+                    if (col == 0) {
+                        var index = products.indexOf(newValue);
+                        if (index > -1) {
+                            data[row][1] = productDetails[index][1];
+                            hot.render();
+                            calculate(row);
+                        }
+                    } else if (col == 1 || col == 2) {
+                        calculate(row);
+                    }
+                })
+            }
+        },
+        filters: true,
+        dropdownMenu: true,
+        allowInsertRow: true,
+        allowRemoveColumn: true,
+        contextMenu: true,
+        manualColumnResize: true,
+        autoInsertRow: true,
+    });
+
+    var header = fs.readFileSync('header.txt').toString();
+    document.getElementById('storeheader').innerHTML = header;
+
+    function addRow() {
+        hot.alter('insert_row');
+    }
+
+    function calculate(row) {
+        if (data[row][1] != '' && data[row][2] != '') {
+            data[row][3] = data[row][1] * data[row][2];
+            hot.render();
+
+            var total = data.reduce((acc, e) => acc + e[3], 0);
+            document.getElementById('total').innerHTML = total;
+            var gstrate = document.getElementById('gstrate').value;
+            var gstval = Math.round(total * gstrate) / 100;
+            document.getElementById('gstval').innerHTML = gstval;
+            document.getElementById('grand').innerHTML = parseFloat(total) + parseFloat(gstval);
+
+        }
+    }
+
+    function startPrint() {
+        document.getElementById('tbody').innerHTML =
+            data.reduce((acc, e) => {
+                return acc + ("<tr>" + e.reduce((acc, e, i) => {
+                    return acc + ("<td>" + ((i == 1 || i == 3) ? ("Rs. " + e) : e) + "</td>");
+                }, "") + "</tr>");
+            }, "");
+
+        document.getElementById('pgstrate').innerHTML = document.getElementById('gstrate').value;
+        document.getElementById('pgst').innerHTML = "Rs. " + document.getElementById('gstval').innerHTML;
+        document.getElementById('pgrand').innerHTML = "Rs. " + document.getElementById('grand').innerHTML;
+        document.getElementById('ptotal').innerHTML = "Rs. " + document.getElementById('total').innerHTML;
+        document.getElementById('date').innerHTML = (new Date()).toString().substr(0, 24);
+
+        print();
+    }
+
+    function subtract() {
+        var valid = true;
+        data.forEach(e => {
+            var index = products.indexOf(e[0]);
+            if (index >= 0) {
+                var val = parseInt(productDetails[index][2]) - parseInt(e[2]);
+                if (val < 0) {
+                    alert('Insufficient stock ' + e[0]);
+                    valid = false
+                    return;
+                } else {
+                    productDetails[index][2] = val;
+                }
+            }
+        })
+        if (valid) {
+            var raw = productDetails.map(e => e.join(',')).join('\n');
+            fs.writeFile('products.csv', raw, err => alert(err ? 'Error' : 'Success'));
+        }
+    }
+
+</script>
+
+</html>

@@ -1,0 +1,76 @@
+<html>
+
+<head>
+    <title>Invoice</title>
+    <script src="node_modules/handsontable/dist/handsontable.full.min.js"></script>
+    <link href="node_modules/handsontable/dist/handsontable.full.min.css" rel="stylesheet" media="screen">
+</head>
+
+<style>
+    body {
+        font-family: sans-serif;
+    }
+</style>
+
+<body>
+    <button onclick="save();">Save</button>
+    <button onclick="addRow();">Add</button>
+    <button onclick="location = 'index.html'">Close</button>
+    <br><br>
+    <div id="example"></div>
+    <br>
+</body>
+
+<script>
+
+    var fs = require('fs');
+    var file = fs.readFileSync('products.csv');
+    var raw = file.toString();
+
+    var data = [['', '']];
+
+    var productDetails = raw.split('\n').map(e => e.split(','));
+    var products = productDetails.map(e => e[0]);
+
+    var container = document.getElementById('example');
+    var hot = new Handsontable(container, {
+        data: data,
+        rowHeaders: true,
+        colHeaders: ['Product', 'Amount to add'],
+        columns: [
+            {
+                type: 'autocomplete',
+                source: products,
+                strict: true,
+            },
+            { editor: 'numeric' },
+        ],
+        filters: true,
+        dropdownMenu: true,
+        allowInsertRow: true,
+        allowRemoveColumn: true,
+        contextMenu: true,
+        manualColumnResize: true,
+        autoInsertRow: true,
+    });
+
+    function addRow() {
+        hot.alter('insert_row');
+    }
+
+    function save() {
+        data.forEach(e => {
+            var index = products.indexOf(e[0]);
+            if (e[1] == "") e[1] = 0;
+            if (index < 0)
+                alert('Product ' + e[0] + ' not found, skipping');
+            else
+                productDetails[index][2] = parseInt(productDetails[index][2]) + parseInt(e[1]);
+        });
+        var raw = productDetails.map(e => e.join(',')).join('\n');
+        fs.writeFile('products.csv', raw, err => alert(err ? 'Error' : 'Success'));
+    }
+
+</script>
+
+</html>
